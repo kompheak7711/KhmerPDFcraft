@@ -13,7 +13,27 @@ offers five generic fonts. The source-level evidence for both is in
 and the design in
 [docs/superpowers/specs/2026-10-26-khmerpdfcraft-design.md](docs/superpowers/specs/2026-10-26-khmerpdfcraft-design.md).
 
-## Run it
+## Desktop app (macOS, Windows, Linux)
+
+The same editor ships as a desktop app built with Electron. Because it bundles Chromium,
+"Fonts on this computer…" works on all three systems, PDFs open from Finder / Explorer
+("Open with") or the command line, and File ▸ Save PDF As… uses the native save dialog.
+
+Installers are produced by the GitHub Actions workflow in `.github/workflows/desktop.yml`:
+run it from the Actions tab (workflow_dispatch) or push a tag such as `v0.1.0`, then pick
+up the files: `.dmg` for macOS (universal), `.exe` installer for Windows, `.AppImage` and
+`.deb` for Linux. The builds are unsigned, so on macOS open the app the first time with
+right-click ▸ Open; Windows SmartScreen asks once for confirmation.
+
+To build locally for the system you are on:
+
+```bash
+npm install
+npm run dist:desktop     # output in release/
+npm run desktop          # or just run it without packaging
+```
+
+## Run it in a browser
 
 Requires Node.js 22 or newer.
 
@@ -72,7 +92,11 @@ npm run build
 ```
 
 Core modules live in `src/core` (`shaping.ts`, `fontInfo.ts`, `pdfWriter.ts`,
-`fonts.ts`, `pdfView.ts`) and the React UI in `src/ui` and `src/App.tsx`.
+`fonts.ts`, `pdfView.ts`) and the React UI in `src/ui` and `src/App.tsx`. The desktop
+shell is `electron/main.cjs` (window, app:// scheme, menu, open/save dialogs, permissions)
+and `electron/preload.cjs` (the small bridge the page sees as `window.khmerpdfcraft`).
+To develop the desktop shell against the live dev server: `npm run dev` in one terminal
+and `KPC_DEV_URL=http://localhost:5173 npx electron .` in another.
 
 `scripts/e2e-smoke.cjs` drives the built app in headless Chromium (needs `playwright`
 installed and `npm run preview` running): it opens a PDF, types Khmer in three fonts,

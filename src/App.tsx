@@ -8,6 +8,7 @@ import { exportPdf } from './core/pdfWriter';
 import { commit, createHistory, redo, replace, undo, type History } from './core/history';
 import { PageView } from './ui/PageView';
 import { FontPanel } from './ui/FontPanel';
+import { desktop } from './desktop';
 
 type Tool = 'select' | 'text';
 
@@ -67,24 +68,33 @@ export function App() {
     setHistory((h) => (record ? commit(h, next) : replace(h, next)));
   }, []);
 
-  const openFile = useCallback(async (file: File) => {
+  const openBytes = useCallback(async (name: string, bytes: Uint8Array) => {
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
       const d = await openPdf(bytes);
       setDoc((old) => {
         old?.cleanup();
         return d;
       });
       setPdfBytes(bytes);
-      setPdfName(file.name);
+      setPdfName(name);
       setHistory(createHistory<TextItem[]>([]));
       setSelectedId(null);
       setEditingId(null);
       setStatus(null);
     } catch (e) {
-      setStatus({ text: `Could not open ${file.name}: ${e instanceof Error ? e.message : String(e)}`, error: true });
+      setStatus({ text: `Could not open ${name}: ${e instanceof Error ? e.message : String(e)}`, error: true });
     }
   }, []);
+
+  const openFile = useCallback(async (file: File) => openBytes(file.name, new Uint8Array(await file.arrayBuffer())), [openBytes]);
+
+  // Desktop app: files opened from the OS or the native File menu arrive here.
+  useEffect(() => {
+    if (!desktop) return;
+    const off = desktop.onOpenFile(({ name, bytes }) => openBytes(name, new Uint8Array(bytes)));
+    desktop.ready();
+    return off;
+  }, [openBytes]);
 
   const addFontFiles = useCallback(async (files: File[]) => {
     for (const file of files) {
@@ -199,18 +209,24 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [editingId, selectedId, deleteSelected]);
 
-  const download = async () => {
+  const download = useCallback(async () => {
     if (!pdfBytes) return;
     setExporting(true);
     setStatus({ text: 'Preparing PDF…' });
     try {
       const sources = new Map(fonts.map((f) => [f.id, { id: f.id, bytes: f.bytes }]));
       const out = await exportPdf(pdfBytes, items, sources);
+      const outName = pdfName.replace(/\.pdf$/i, '') + '-khmer.pdf';
+      if (desktop) {
+        const result = await desktop.savePdf(outName, out);
+        setStatus(result.saved ? { text: `Saved ${result.path}` } : { text: 'Save cancelled' });
+        return;
+      }
       const blob = new Blob([out as BlobPart], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = pdfName.replace(/\.pdf$/i, '') + '-khmer.pdf';
+      a.download = outName;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
       setStatus({ text: `Saved ${a.download}` });
@@ -219,7 +235,14 @@ export function App() {
     } finally {
       setExporting(false);
     }
-  };
+  }, [pdfBytes, pdfName, fonts, items]);
+
+  useEffect(() => {
+    if (!desktop) return;
+    return desktop.onRequestSave(() => {
+      download();
+    });
+  }, [download]);
 
   const boxHandlers = {
     onSelect: (id: string) => {
@@ -252,7 +275,7 @@ export function App() {
         <div className="title">
           Khmer<span>PDF</span>craft
         </div>
-        <button type="button" onClick={() => fileInput.current?.click()}>
+        <button type="button" onClick={() => (desktop ? desktop.openDialog() : fileInput.current?.click())}>
           Open PDF…
         </button>
         <input
@@ -334,7 +357,7 @@ export function App() {
           {status?.text ?? fontStatus}
         </span>
         <button type="button" className="primary" onClick={download} disabled={!pdfBytes || exporting} data-testid="download">
-          {exporting ? 'Saving…' : 'Download PDF'}
+          {exporting ? 'Saving…' : desktop ? 'Save PDF…' : 'Download PDF'}
         </button>
       </header>
 
@@ -384,7 +407,7 @@ export function App() {
             </div>
             <div>Open a PDF, or drop one here. Drop .ttf or .otf files to add fonts.</div>
             <div>
-              <button type="button" className="primary" onClick={() => fileInput.current?.click()}>
+              <button type="button" className="primary" onClick={() => (desktop ? desktop.openDialog() : fileInput.current?.click())}>
                 Open PDF…
               </button>
             </div>

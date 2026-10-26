@@ -1,7 +1,9 @@
 /** pdf.js loading and page rendering for the viewer. */
-import * as pdfjs from 'pdfjs-dist';
+// The legacy build carries polyfills (e.g. Uint8Array.toHex) so the viewer also runs in
+// the Electron shell and in older Safari.
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
