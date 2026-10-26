@@ -22,8 +22,15 @@ The same editor ships as a desktop app built with Electron. Because it bundles C
 Installers are produced by the GitHub Actions workflow in `.github/workflows/desktop.yml`:
 run it from the Actions tab (workflow_dispatch) or push a tag such as `v0.1.0`, then pick
 up the files: `.dmg` for macOS (universal), `.exe` installer for Windows, `.AppImage` and
-`.deb` for Linux. The builds are unsigned, so on macOS open the app the first time with
-right-click ▸ Open; Windows SmartScreen asks once for confirmation.
+`.deb` for Linux. The builds are not signed or notarized, so the first launch needs one
+extra step:
+
+- macOS: Gatekeeper says the app "Not Opened" and offers only Move to Trash / Done.
+  Click Done, open System Settings ▸ Privacy & Security, scroll to Security and click
+  "Open Anyway" next to KhmerPDFcraft. Or, in Terminal:
+  `xattr -dr com.apple.quarantine /Applications/KhmerPDFcraft.app`.
+  Signing and notarizing (which removes this step) needs an Apple Developer account.
+- Windows: SmartScreen shows "Windows protected your PC"; click More info ▸ Run anyway.
 
 To build locally for the system you are on:
 
