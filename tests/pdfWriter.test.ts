@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { PDFDocument, PDFName, PDFDict, PDFRawStream, PDFRef } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFDict, PDFRawStream, PDFRef, PDFArray } from 'pdf-lib';
+import { inflateSync } from 'node:zlib';
+
+function lastContent(doc: PDFDocument): string {
+  const contents = doc.getPage(0).node.Contents() as PDFArray;
+  const ref = contents.get(contents.size() - 1) as PDFRef;
+  const stream = doc.context.lookup(ref) as PDFRawStream;
+  return Buffer.from(inflateSync(Buffer.from(stream.contents))).toString('latin1');
+}
 import { exportPdf, MissingGlyphError, baselineFromTop, glyphUnicodeMap } from '../src/core/pdfWriter';
 import { Shaper } from '../src/core/shaping';
 import type { TextItem } from '../src/core/model';
@@ -47,27 +55,24 @@ describe('exportPdf', () => {
     expect(cid.get(PDFName.of('Subtype'))!.toString()).toBe('/CIDFontType2');
     const descriptor = cid.lookup(PDFName.of('FontDescriptor'), PDFDict);
     expect(descriptor.get(PDFName.of('FontFile2'))).toBeDefined();
-    const fontFile = descriptor.lookup(PDFName.of('FontFile2'), PDFRawStream);
+    const fontFile = doc.context.lookup(descriptor.get(PDFName.of('FontFile2')) as PDFRef) as PDFRawStream;
     expect(fontFile.contents.length).toBeGreaterThan(100);
     expect(fontFile.contents.length).toBeLessThan(notoKhmer.length); // subset
 
     // Content: our stream is the last one and carries ActualText + glyph codes.
-    const contents = page.node.Contents()!;
-    const last = doc.context.lookup((contents as any).get((contents as any).size() - 1) as PDFRef, PDFRawStream);
-    const { inflateSync } = await import('node:zlib');
-    const text = Buffer.from(inflateSync(Buffer.from(last.contents))).toString('latin1');
+    const text = lastContent(doc);
     expect(text).toContain('/ActualText <FEFF');
     expect(text).toContain(' Tf');
     expect(text).toContain(' Tj');
     expect(text).toContain('0 0 1 rg');
-    const lines = text.split('\n').filter((l) => l.includes('BDC'));
+    const lines = text.split('\n').filter((l: string) => l.includes('BDC'));
     expect(lines.length).toBe(2);
   });
 
   it('extracts the original Khmer text back through pdf.js', async () => {
     const out = await exportPdf(await blankPdf(), [item({ text: 'ខ្មែរ' })], fonts);
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const doc = await pdfjs.getDocument({ data: out, useSystemFonts: false, isEvalSupported: false }).promise;
+    const doc = await pdfjs.getDocument({ data: out, useSystemFonts: false }).promise;
     const page = await doc.getPage(1);
     const content = await page.getTextContent();
     const joined = content.items.map((i: any) => i.str ?? '').join('');
@@ -117,10 +122,7 @@ describe('exportPdf', () => {
     page.setCropBox(100, 100, 400, 600);
     const out = await exportPdf(await base.save(), [item({ left: 0, top: 0, text: 'ក' })], fonts);
     const doc = await PDFDocument.load(out);
-    const contents = doc.getPage(0).node.Contents()!;
-    const last = doc.context.lookup((contents as any).get((contents as any).size() - 1) as PDFRef, PDFRawStream);
-    const { inflateSync } = await import('node:zlib');
-    const text = Buffer.from(inflateSync(Buffer.from(last.contents))).toString('latin1');
+    const text = lastContent(doc);
     const m = /1 0 0 1 ([\d.]+) ([\d.]+) Tm/.exec(text)!;
     expect(Number(m[1])).toBeCloseTo(100, 0); // crop.x + left
     expect(Number(m[2])).toBeLessThan(700); // below crop top (100 + 600)
